@@ -49,8 +49,8 @@ from paddlenlp.transformers import (
     AutoConfig,
     AutoModelForCausalLM,
     AutoTokenizer,
-    ChatGLMv2Tokenizer,
     ChatGLMTokenizer,
+    ChatGLMv2Tokenizer,
     LlamaTokenizer,
     PretrainedModel,
     PretrainedTokenizer,
@@ -242,7 +242,8 @@ class BasePredictor:
             padding=True,
             # when use chat_template, it should not add special tokens
             # chatglm2 prefix-tokens can not be tokenized into ids
-            add_special_tokens=self.tokenizer.chat_template is None or isinstance(self.tokenizer, (ChatGLMv2Tokenizer, ChatGLMTokenizer)),
+            add_special_tokens=self.tokenizer.chat_template is None
+            or isinstance(self.tokenizer, (ChatGLMv2Tokenizer, ChatGLMTokenizer)),
         )
         return tokenized_source
 
@@ -652,9 +653,6 @@ class StaticInferencePredictor(InferencePredictorMixin, BasePredictor):
         config = paddle.inference.Config(infer_model_path + ".pdmodel", infer_model_path + ".pdiparams")
 
         config.switch_ir_optim(True)
-        # remove `gpu_cpu_map_matmul_v2_to_matmul_pass` to avoid mapping matmul_v2 -> matmul op
-        if predictor_args.dtype == "bfloat16":
-            config.delete_pass("gpu_cpu_map_matmul_v2_to_matmul_pass")
 
         device_id = int(os.environ.get("FLAGS_selected_gpus", 0))
         config.enable_use_gpu(100, device_id)
@@ -671,6 +669,10 @@ class StaticInferencePredictor(InferencePredictorMixin, BasePredictor):
 
             dist_config.set_comm_init_config(os.path.join(predictor_args.model_name_or_path, "rank_mapping.csv"))
             config.set_dist_config(dist_config)
+
+        # remove `gpu_cpu_map_matmul_v2_to_matmul_pass` to avoid mapping matmul_v2 -> matmul op
+        if predictor_args.dtype == "bfloat16":
+            config.delete_pass("gpu_cpu_map_matmul_v2_to_matmul_pass")
 
         predictor = paddle.inference.create_predictor(config)
         return predictor
